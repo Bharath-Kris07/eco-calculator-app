@@ -2,6 +2,8 @@
 
 A modern web application that remixes the classic calculator to measure the environmental impact of daily activities. Built for a hackathon.
 
+[**➡️ View the Live Demo Here**](https://eco-calculator-app-msp6.vercel.app/)
+
 ## 🚀 About The Project
 
 This project reinvents the simple calculator by adding new features and API integrations. Instead of just numbers, you can calculate the carbon footprint (CO2e) of:
