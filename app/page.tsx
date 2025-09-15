@@ -26,100 +26,116 @@ export default function EcoCalculator() {
     setStandardExpression("");
   }, [mode]);
 
-  const handleCalculate = async () => {
-    // --- ADDED: The debugging line you requested ---
-    console.log("Checking API Key:", process.env.NEXT_PUBLIC_CLIMATIQ_API_KEY); 
+const handleCalculate = async () => {
+  setIsLoading(true);
+  setError(null);
+  setResult(null);
 
-    setIsLoading(true);
-    setError(null);
-    setResult(null);
-
-    if (mode === 'standard') {
-      try {
-        const evalResult = Function(`"use strict"; return (${standardExpression})`)();
-        setResult(evalResult);
-        setInput(evalResult.toString());
-      } catch {
-        setError("Invalid calculation");
-      }
-      setIsLoading(false);
-      return;
+  // Standard calculator logic remains unchanged
+  if (mode === 'standard') {
+    try {
+      const evalResult = Function(`"use strict"; return (${standardExpression})`)();
+      setResult(evalResult);
+      setInput(evalResult.toString());
+    } catch {
+      setError("Invalid calculation");
     }
+    setIsLoading(false);
+    return;
+  }
 
-    const apiKey = process.env.NEXT_PUBLIC_CLIMATIQ_API_KEY;
-
+  const apiKey = process.env.NEXT_PUBLIC_CARBON_INTERFACE_API_KEY;
+  
+  try {
+    // We throw an error if the key is missing to trigger the fallback
     if (!apiKey) {
-      setError("API key is not configured.");
-      setIsLoading(false);
-      return;
+      throw new Error("API key not configured.");
     }
 
-    let emission_factor = '';
-    let parameters = {};
-
+    let requestBody = {};
     if (mode === 'travel') {
-      const distance = parseFloat(input);
-      if (isNaN(distance) || distance <= 0) {
-        setError('Please enter a valid distance.');
-        setIsLoading(false);
-        return;
-      }
-      const factors = {
-        car: 'passenger_vehicle-vehicle_type_car-fuel_source_na-distance_na-engine_size_na',
-        bus: 'passenger_vehicle-vehicle_type_bus-fuel_source_na-distance_na-engine_size_na',
-        train: 'passenger_train-route_type_national_rail-fuel_source_na'
-      };
-      if (transportType === 'bike') {
-        setResult(0);
-        setIsLoading(false);
-        return;
-      }
-      emission_factor = factors[transportType];
-      parameters = { distance: distance, distance_unit: 'km' };
-
+        const distance = parseFloat(input);
+        if (isNaN(distance) || distance <= 0) {
+          setError('Please enter a valid distance.');
+          setIsLoading(false); return;
+        }
+        const transportMethodMap = { car: "truck", bus: "truck", train: "train" };
+        if (transportType === 'bike') {
+          setResult(0);
+          setIsLoading(false); return;
+        }
+        requestBody = {
+          type: "shipping", weight_value: 100, weight_unit: "kg",
+          distance_value: distance, distance_unit: "km",
+          transport_method: transportMethodMap[transportType],
+        };
     } else if (mode === 'energy') {
-      const energy = parseFloat(input);
-      if (isNaN(energy) || energy <= 0) {
-        setError('Please enter a valid energy amount.');
-        setIsLoading(false);
-        return;
-      }
-      emission_factor = 'electricity-energy_source_grid_mix';
-      parameters = { energy: energy, energy_unit: 'kWh' };
+        const energy = parseFloat(input);
+        if (isNaN(energy) || energy <= 0) {
+          setError('Please enter a valid energy amount.');
+          setIsLoading(false); return;
+        }
+        requestBody = {
+          type: "electricity", electricity_unit: "kwh",
+          electricity_value: energy, country: "IN",
+        };
     }
+
+    // Attempt to fetch from the live API
+    const response = await fetch('https://www.carboninterface.com/api/v1/estimates', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error?.message || 'API responded with an error.');
+    }
+    
+    setResult(data.data.attributes.carbon_kg);
+    console.log("Success: Fetched data from Live API.");
+
+  } catch (err: any) {
+    // --- THIS IS THE FALLBACK LOGIC WITH LOCAL DATA ---
+    console.warn("API call failed, using local backup data. Error:", err.message);
 
     try {
-      const response = await fetch('https://beta4.api.climatiq.io/estimate', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          emission_factor: {
-            id: emission_factor
-          },
-          parameters: parameters
-        })
-      });
+      let calculatedCo2e = 0;
+      // This is the local backup data you asked about
+      const localFactors = {
+        car: 0.18,      // kg CO2e per km
+        bus: 0.08,      // kg CO2e per km
+        train: 0.04,    // kg CO2e per km
+        bike: 0,
+        energy: 0.709   // kg CO2e per kWh for India's grid
+      };
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error("API Error:", errorData);
-        throw new Error('Failed to fetch data from the API.');
+      if (mode === 'travel') {
+        const distance = parseFloat(input);
+        if (!isNaN(distance) && distance >= 0) {
+          calculatedCo2e = distance * localFactors[transportType];
+        } else {
+          setError('Please enter a valid distance.');
+        }
+      } else if (mode === 'energy') {
+        const energy = parseFloat(input);
+        if (!isNaN(energy) && energy >= 0) {
+          calculatedCo2e = energy * localFactors.energy;
+        } else {
+          setError('Please enter a valid energy amount.');
+        }
       }
-
-      const data = await response.json();
-      setResult(data.co2e);
-
-    } catch (err) {
-      setError('An error occurred. Please try again.');
-      console.error(err);
-    } finally {
-      setIsLoading(false);
+      setResult(calculatedCo2e);
+    } catch (fallbackError) {
+      setError('An error occurred during fallback calculation.');
     }
-  }; // <-- FIXED: Added the missing closing brace and semicolon
 
+  } finally {
+    setIsLoading(false);
+  }
+};
   const handleStandardInput = (value: string) => {
     if (value === "C") {
       setStandardExpression("")
