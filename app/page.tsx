@@ -16,11 +16,9 @@ export default function EcoCalculator() {
   const [transportType, setTransportType] = useState<TransportType>("car")
   const [standardExpression, setStandardExpression] = useState("")
   
-  // --- ADDED: State for loading and error messages ---
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // --- ADDED: Effect to clear input when mode changes ---
   useEffect(() => {
     setInput("");
     setResult(null);
@@ -29,11 +27,13 @@ export default function EcoCalculator() {
   }, [mode]);
 
   const handleCalculate = async () => {
+    // --- ADDED: The debugging line you requested ---
+    console.log("Checking API Key:", process.env.NEXT_PUBLIC_CLIMATIQ_API_KEY); 
+
     setIsLoading(true);
     setError(null);
     setResult(null);
 
-    // --- Logic for Standard Calculator Mode ---
     if (mode === 'standard') {
       try {
         const evalResult = Function(`"use strict"; return (${standardExpression})`)();
@@ -64,11 +64,11 @@ export default function EcoCalculator() {
         setIsLoading(false);
         return;
       }
-  const factors = {
-  car: 'passenger_vehicle-vehicle_type_car-fuel_source_na-distance_na-engine_size_na',
-  bus: 'passenger_vehicle-vehicle_type_bus-fuel_source_na-distance_na-engine_size_na',
-  train: 'passenger_train-route_type_national_rail-fuel_source_na'
-};
+      const factors = {
+        car: 'passenger_vehicle-vehicle_type_car-fuel_source_na-distance_na-engine_size_na',
+        bus: 'passenger_vehicle-vehicle_type_bus-fuel_source_na-distance_na-engine_size_na',
+        train: 'passenger_train-route_type_national_rail-fuel_source_na'
+      };
       if (transportType === 'bike') {
         setResult(0);
         setIsLoading(false);
@@ -88,51 +88,51 @@ export default function EcoCalculator() {
       parameters = { energy: energy, energy_unit: 'kWh' };
     }
 
- try {
-  const response = await fetch('https://beta4.api.climatiq.io/estimate', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      emission_factor: {
-        id: emission_factor
-      },
-      parameters: parameters
-    })
-  }); // <-- The fetch call is properly closed here
+    try {
+      const response = await fetch('https://beta4.api.climatiq.io/estimate', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          emission_factor: {
+            id: emission_factor
+          },
+          parameters: parameters
+        })
+      });
 
-  if (!response.ok) {
-    const errorData = await response.json();
-    console.error("API Error:", errorData);
-    throw new Error('Failed to fetch data from the API.');
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("API Error:", errorData);
+        throw new Error('Failed to fetch data from the API.');
+      }
+
+      const data = await response.json();
+      setResult(data.co2e);
+
+    } catch (err) {
+      setError('An error occurred. Please try again.');
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  }; // <-- FIXED: Added the missing closing brace and semicolon
+
+  const handleStandardInput = (value: string) => {
+    if (value === "C") {
+      setStandardExpression("")
+      setInput("")
+      setResult(null)
+    } else if (value === "=") {
+      handleCalculate()
+    } else {
+      const newExpression = standardExpression + value
+      setStandardExpression(newExpression)
+      setInput(newExpression)
+    }
   }
-
-  const data = await response.json();
-  setResult(data.co2e);
-
-} catch (err) {
-  setError('An error occurred. Please try again.');
-  console.error(err);
-} finally {
-setIsLoading(false);
-}
-}
-
-const handleStandardInput = (value: string) => {
-  if (value === "C") {
-    setStandardExpression("")
-    setInput("")
-    setResult(null)
-  } else if (value === "=") {
-    handleCalculate() // This now correctly calls the updated function
-  } else {
-    const newExpression = standardExpression + value
-    setStandardExpression(newExpression)
-    setInput(newExpression)
-  }
-}
 
   const standardButtons = [
     ["7", "8", "9", "/"],
@@ -237,7 +237,6 @@ const handleStandardInput = (value: string) => {
             )}
           </div>
           
-          {/* --- ADDED: Error message display --- */}
           {error && (
             <p className="text-sm text-center text-destructive">{error}</p>
           )}
@@ -246,7 +245,7 @@ const handleStandardInput = (value: string) => {
           {(mode === "travel" || mode === "energy") && (
             <Button
               onClick={handleCalculate}
-              disabled={isLoading} // --- ADDED: Disable button when loading ---
+              disabled={isLoading}
               className="w-full h-12 text-lg font-semibold"
             >
               {isLoading ? "Calculating..." : "Calculate"}
