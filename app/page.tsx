@@ -47,7 +47,6 @@ const handleCalculate = async () => {
   const apiKey = process.env.NEXT_PUBLIC_CARBON_INTERFACE_API_KEY;
   
   try {
-    // We throw an error if the key is missing to trigger the fallback
     if (!apiKey) {
       throw new Error("API key not configured.");
     }
@@ -81,7 +80,6 @@ const handleCalculate = async () => {
         };
     }
 
-    // Attempt to fetch from the live API
     const response = await fetch('https://www.carboninterface.com/api/v1/estimates', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -97,19 +95,18 @@ const handleCalculate = async () => {
     setResult(data.data.attributes.carbon_kg);
     console.log("Success: Fetched data from Live API.");
 
-  } catch (err: any) {
-    // --- THIS IS THE FALLBACK LOGIC WITH LOCAL DATA ---
-    console.warn("API call failed, using local backup data. Error:", err.message);
+  } catch (err) { // CHANGED: Removed the ': any' type to fix the error
+    let errorMessage = "API call failed.";
+    if (err instanceof Error) {
+        errorMessage = err.message;
+    }
+    console.warn("API call failed, using local backup data. Error:", errorMessage);
 
     try {
       let calculatedCo2e = 0;
-      // This is the local backup data you asked about
       const localFactors = {
-        car: 0.18,      // kg CO2e per km
-        bus: 0.08,      // kg CO2e per km
-        train: 0.04,    // kg CO2e per km
-        bike: 0,
-        energy: 0.709   // kg CO2e per kWh for India's grid
+        car: 0.18, bus: 0.08, train: 0.04, bike: 0,
+        energy: 0.709
       };
 
       if (mode === 'travel') {
@@ -128,7 +125,7 @@ const handleCalculate = async () => {
         }
       }
       setResult(calculatedCo2e);
-    } catch (fallbackError) {
+    } catch { // CHANGED: Removed the unused 'fallbackError' variable to fix the warning
       setError('An error occurred during fallback calculation.');
     }
 
